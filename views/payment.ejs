@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SlayPayment | Secure Checkout</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+        
+        :root {
+            --primary: #ffffff;
+            --bg: #000000;
+            --card-bg: #111111;
+            --text-main: #ffffff;
+            --text-dim: #999999;
+            --border: #333333;
+            --accent: #222222;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 3rem 2.5rem;
+            border-radius: 0;
+            box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.8);
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            border: 1px solid var(--border);
+            position: relative;
+            max-height: 90vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #333 #000;
+        }
+
+        .card::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .card::-webkit-scrollbar-track {
+            background: #000;
+        }
+
+        .card::-webkit-scrollbar-thumb {
+            background: #333;
+        }
+
+        .brand-logo {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -2px;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+            background: linear-gradient(to bottom, #fff 0%, #666 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .summary-section {
+            margin-bottom: 2.5rem;
+            padding: 1.5rem;
+            background: #000;
+            border: 1px solid #222;
+        }
+
+        .summary-label {
+            color: var(--text-dim);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 0.5rem;
+        }
+
+        .summary-amount {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #fff;
+        }
+
+        .summary-amount::before {
+            content: '$';
+            font-size: 1.2rem;
+            vertical-align: top;
+            margin-right: 4px;
+            font-weight: 400;
+            color: var(--text-dim);
+        }
+
+        .summary-id {
+            color: #444;
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        h1 { margin-bottom: 0.5rem; font-size: 1.2rem; font-weight: 500; text-transform: uppercase; letter-spacing: 2px; }
+        p { color: var(--text-dim); margin-bottom: 2.5rem; font-size: 0.9rem; font-weight: 300; }
+        
+        #payment-element { margin-bottom: 2rem; }
+
+        button {
+            background: var(--primary);
+            color: black;
+            border: none;
+            padding: 1.2rem;
+            border-radius: 0;
+            font-weight: 700;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-size: 0.8rem;
+        }
+
+        button:hover { 
+            background: #cccccc;
+            letter-spacing: 5px;
+        }
+
+        button:disabled { background: #333; color: #666; cursor: not-allowed; }
+        
+        #error-message { 
+            color: #ff4444; 
+            margin-top: 1.5rem; 
+            font-size: 0.8rem; 
+            font-weight: 400;
+            letter-spacing: 1px;
+        }
+
+        .footer {
+            margin-top: 2rem;
+            font-size: 0.7rem;
+            color: #444;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+    </style>
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+    <div class="card">
+        <div class="brand-logo">SLAY</div>
+        
+        <div class="summary-section">
+            <div class="summary-label">Total Amount</div>
+            <div id="display-amount" class="summary-amount">--.--</div>
+            <div class="summary-id">Account: <span id="display-userid">...</span></div>
+        </div>
+
+        <form id="payment-form">
+            <div id="payment-element"></div>
+            <button id="submit">
+                <span id="button-text">Pay Now</span>
+            </button>
+            <div id="error-message"></div>
+        </form>
+
+        <div class="footer">Securely processed by SLAY Infrastructure</div>
+    </div>
+
+    <script>
+        const stripe = Stripe('<%= stripePublishableKey %>');
+        let elements;
+
+        initialize();
+
+        async function initialize() {
+            // Get userId and amount from URL query parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const userId = urlParams.get('userId');
+            const amount = urlParams.get('amount');
+
+            if (!userId || !amount) {
+                document.querySelector("#error-message").textContent = "Missing information in URL.";
+                document.querySelector("#submit").disabled = true;
+                return;
+            }
+
+            // Update UI with amount and userId
+            document.getElementById('display-amount').textContent = parseFloat(amount).toFixed(2);
+            document.getElementById('display-userid').textContent = userId;
+
+            const response = await fetch("/api/payment/create-intent", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, amount }),
+            });
+            const { clientSecret, error } = await response.json();
+
+            if (error) {
+                document.querySelector("#error-message").textContent = error;
+                return;
+            }
+
+            elements = stripe.elements();
+            const style = {
+                base: {
+                    color: "#ffffff",
+                    fontFamily: '"Outfit", sans-serif',
+                    fontSmoothing: "antialiased",
+                    fontSize: "16px",
+                    "::placeholder": {
+                        color: "#666666"
+                    }
+                },
+                invalid: {
+                    color: "#ff4444",
+                    iconColor: "#ff4444"
+                }
+            };
+
+            const cardElement = elements.create("card", { style: style, hidePostalCode: true });
+            cardElement.mount("#payment-element");
+
+            const form = document.querySelector("#payment-form");
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                document.querySelector("#submit").disabled = true;
+                document.querySelector("#button-text").textContent = "Processing...";
+
+                const { paymentIntent, error } = await stripe.confirmCardPayment(clientSecret, {
+                    payment_method: {
+                        card: cardElement,
+                    }
+                });
+
+                if (error) {
+                    document.querySelector("#error-message").textContent = error.message;
+                    document.querySelector("#submit").disabled = false;
+                    document.querySelector("#button-text").textContent = "Pay Now";
+                } else {
+                    if (paymentIntent.status === "succeeded") {
+                        window.location.href = "/success";
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
